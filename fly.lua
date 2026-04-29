@@ -941,7 +941,7 @@ local function startBodyMoverFlyLoop()
 				cf.LookVector * (CONTROL.F - CONTROL.B) +
 				cf.RightVector * (CONTROL.R - CONTROL.L)
 
-			-- فحص إذا كان اللاعب يحاول التحرك (اتجاهات أو صعود/نزول)
+			-- فحص الحركة لإلغاء البوست
 			local isMoving = moveVector.Magnitude > 0 or CONTROL.Q ~= 0 or CONTROL.E ~= 0
 
 			local vertical = (CONTROL.Q + CONTROL.E) * targetLift
@@ -952,47 +952,38 @@ local function startBodyMoverFlyLoop()
 				and moveVector.Unit * flySpeed
 				or Vector3.zero
 
-			-- إذا تحرك اللاعب أو انتهى الوقت، يتم إلغاء البوست فوراً
+			-- منطق البوست: يتوقف فوراً إذا تحركت
 			if isInitialBoosting then
 				local t = math.clamp((os.clock() - boostStartTime) / initialBoostDuration, 0, 1)
 
 				if isMoving or t >= 1 then
 					isInitialBoosting = false
 				else
-					local smooth = 1 - (1 - t) * (1 - t)
-					bodyVelocity.Velocity = Vector3.new(0, initialBoost * (1 - smooth), 0)
+					bodyVelocity.Velocity = Vector3.new(0, initialBoost * (1 - t), 0)
 				end
 			end
 
-			-- الحركة العادية تعمل فقط إذا لم نكن في مرحلة البوست
+			-- حركة حادة ومباشرة (بدون Lerp)
 			if not isInitialBoosting then
-				local alpha = 1 - math.exp(-6 * dt)
-				bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(targetVelocity, alpha)
+				bodyVelocity.Velocity = targetVelocity
 			end
 
-			-- الجزء البصري (الدوران والميلان)
+			-- المنطق البصري (الميلان)
 			if not movedOnce and moveVector.Magnitude > 0 then
 				movedOnce = true
 			end
 
-		
 			if movedOnce then
 				local targetTilt = 0
 				if CONTROL.F > 0 then targetTilt = math.rad(-10)
 				elseif CONTROL.B > 0 then targetTilt = math.rad(10) end
+				currentTilt = targetTilt -- ميلان حاد أيضاً
 
-				-- تنعيم حساب الميلان (بصرياً)
-				currentTilt = currentTilt + (targetTilt - currentTilt) * (1 - math.exp(-10 * dt))
-
-				-- تنعيم الدوران بصرياً فقط
-				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(
-					CFrame.new(torso.Position, torso.Position + camera.CFrame.LookVector) * CFrame.Angles(currentTilt,0,0),
-					1 - math.exp(-12 * dt)
-				)
+				bodyGyro.CFrame = CFrame.new(torso.Position, torso.Position + camera.CFrame.LookVector) * CFrame.Angles(currentTilt,0,0)
 			end
 		end
 
-		-- التكملة (التنظيف) كما هي
+		-- التنظيف
 		if bodyGyro then bodyGyro:Destroy() end
 		if bodyVelocity then bodyVelocity:Destroy() end
 		humanoid.PlatformStand = false
