@@ -850,6 +850,58 @@ local isInitialBoosting = false
 local bodyGyro, bodyVelocity
 local CONTROL = {F=0,B=0,L=0,R=0,Q=0,E=0}
 
+if UserInputService.TouchEnabled then
+
+	local lastPos = nil
+
+	UserInputService.TouchStarted:Connect(function(touch, gpe)
+		if gpe then return end
+		lastPos = touch.Position
+	end)
+
+	UserInputService.TouchMoved:Connect(function(touch, gpe)
+		if gpe then return end
+		if not lastPos then
+			lastPos = touch.Position
+			return
+		end
+
+		local delta = touch.Position - lastPos
+		lastPos = touch.Position
+
+		CONTROL.F = 0
+		CONTROL.B = 0
+		CONTROL.L = 0
+		CONTROL.R = 0
+		CONTROL.Q = 0
+		CONTROL.E = 0
+
+		if delta.Y < -8 then
+			CONTROL.F = 1
+		elseif delta.Y > 8 then
+			CONTROL.B = -1
+		end
+
+		if delta.X < -8 then
+			CONTROL.L = -1
+		elseif delta.X > 8 then
+			CONTROL.R = 1
+		end
+	end)
+
+	UserInputService.TouchEnded:Connect(function()
+		lastPos = nil
+
+		CONTROL.F = 0
+		CONTROL.B = 0
+		CONTROL.L = 0
+		CONTROL.R = 0
+		CONTROL.Q = 0
+		CONTROL.E = 0
+	end)
+
+end
+
 -- MOBILE TOUCH SUPPORT
 
 --// TextBox (ضع هنا TextBox الخاص بك)
