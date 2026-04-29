@@ -767,16 +767,16 @@ end)
 
 --// References
 
---// Drag Variables
 local UserInputService = game:GetService("UserInputService")
+
 local dragging = false
 local dragInput
 local dragStart
 local startPos
 
--- تحديث موقع الـ GUI
 local function update(input)
 	if not dragging then return end
+
 	local delta = input.Position - dragStart
 	Main.Position = UDim2.new(
 		0,
@@ -788,32 +788,33 @@ end
 
 -- بداية السحب
 DragBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+		or input.UserInputType == Enum.UserInputType.Touch then
+
 		dragging = true
 		dragStart = input.Position
 		startPos = Vector2.new(Main.AbsolutePosition.X, Main.AbsolutePosition.Y)
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
 	end
 end)
 
--- متابعة حركة الماوس
-DragBar.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
-		dragInput = input
+-- نهاية السحب
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		dragging = false
 	end
 end)
 
+-- تتبع الحركة
 UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput then
+	if dragging and (
+		input.UserInputType == Enum.UserInputType.MouseMovement 
+			or input.UserInputType == Enum.UserInputType.Touch
+		) then
 		update(input)
 	end
 end)
-
-
 --// Close Button
 
 Close.MouseButton1Click:Connect(function()
@@ -850,59 +851,43 @@ local isInitialBoosting = false
 local bodyGyro, bodyVelocity
 local CONTROL = {F=0,B=0,L=0,R=0,Q=0,E=0}
 
-if UserInputService.TouchEnabled then
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
-	local lastPos = nil
+local player = Players.LocalPlayer
+local PlayerModule = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+local controls = PlayerModule:GetControls()
 
-	UserInputService.TouchStarted:Connect(function(touch, gpe)
-		if gpe then return end
-		lastPos = touch.Position
-	end)
-
-	UserInputService.TouchMoved:Connect(function(touch, gpe)
-		if gpe then return end
-		if not lastPos then
-			lastPos = touch.Position
-			return
-		end
-
-		local delta = touch.Position - lastPos
-		lastPos = touch.Position
-
-		CONTROL.F = 0
-		CONTROL.B = 0
-		CONTROL.L = 0
-		CONTROL.R = 0
-		CONTROL.Q = 0
-		CONTROL.E = 0
-
-		if delta.Y < -8 then
-			CONTROL.F = 1
-		elseif delta.Y > 8 then
-			CONTROL.B = -1
-		end
-
-		if delta.X < -8 then
-			CONTROL.L = -1
-		elseif delta.X > 8 then
-			CONTROL.R = 1
-		end
-	end)
-
-	UserInputService.TouchEnded:Connect(function()
-		lastPos = nil
-
-		CONTROL.F = 0
-		CONTROL.B = 0
-		CONTROL.L = 0
-		CONTROL.R = 0
-		CONTROL.Q = 0
-		CONTROL.E = 0
-	end)
-
+-- دالة التصفير
+local function reset()
+	CONTROL.F = 0
+	CONTROL.B = 0
+	CONTROL.L = 0
+	CONTROL.R = 0
 end
 
--- MOBILE TOUCH SUPPORT
+RunService.RenderStepped:Connect(function()
+	local moveVector = controls:GetMoveVector()
+
+	-- العتبة (Threshold) لتجنب الحركات البسيطة جداً
+	local T = 0.25 
+
+	-- منطق الاتجاهات الصحيح لـ Thumbstick روبلوكس:
+	-- Z < 0 -> أمام (Forward)
+	-- Z > 0 -> خلف (Backward)
+	-- X > 0 -> يمين (Right)
+	-- X < 0 -> يسار (Left)
+
+	CONTROL.F = (moveVector.Z < -T) and 1 or 0
+	CONTROL.B = (moveVector.Z > T) and 1 or 0
+	CONTROL.R = (moveVector.X > T) and 1 or 0
+	CONTROL.L = (moveVector.X < -T) and 1 or 0
+
+	-- إذا كان اللاعب لا يحرك الجويستيك نهائياً
+	if moveVector.Magnitude < T then
+		reset()
+	end
+end)
 
 --// TextBox (ضع هنا TextBox الخاص بك)
 local TextBox = TextBox -- تأكد أنه معرف في GUI
@@ -930,14 +915,18 @@ local function startBodyMoverFlyLoop()
 
 	bodyGyro = Instance.new("BodyGyro", torso)
 	bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+	-- رفعنا الـ P والـ D لضمان أن الدوران البصري يكون ناعم وبدون "رجفة"
 	bodyGyro.D = 500
 	bodyGyro.P = 3000
 	bodyGyro.CFrame = torso.CFrame
 
+	-- الحركة تبقى حادة بعد البوست
+	local lerpFactorGyro = 0.07
 	local currentTilt = 0
 	local movedOnce = false
-	local targetLift = 30 -- قوة الرفع لـ Q و E
+	local targetLift = 10
 
+	-- بوست أولي أقوى من السابق
 	local initialBoost = 11.8
 	local initialBoostDuration = 0.65
 	local boostStartTime = os.clock()
@@ -946,55 +935,70 @@ local function startBodyMoverFlyLoop()
 		while FLYING and torso.Parent do
 			local dt = RunService.Heartbeat:Wait()
 			local camera = workspace.CurrentCamera
-			local flySpeed = getFlySpeed()
+			local cf = camera.CFrame
 
-			-- الذكاء هنا: MoveDirection تجلب الحركة من الجوستيك أو الكيبورد تلقائياً
-			local moveDirection = humanoid.MoveDirection 
+			local moveVector =
+				cf.LookVector * (CONTROL.F - CONTROL.B) +
+				cf.RightVector * (CONTROL.R - CONTROL.L)
 
-			-- حساب الارتفاع (يدوي لـ Q و E فقط)
+			-- فحص إذا كان اللاعب يحاول التحرك (اتجاهات أو صعود/نزول)
+			local isMoving = moveVector.Magnitude > 0 or CONTROL.Q ~= 0 or CONTROL.E ~= 0
+
 			local vertical = (CONTROL.Q + CONTROL.E) * targetLift
+			moveVector = moveVector + Vector3.new(0, vertical, 0)
 
-			-- دمج اتجاه الجوستيك/الكيبورد مع الارتفاع
-			local targetVelocity = (moveDirection * flySpeed) + Vector3.new(0, vertical, 0)
+			local flySpeed = getFlySpeed()
+			local targetVelocity = (moveVector.Magnitude > 0)
+				and moveVector.Unit * flySpeed
+				or Vector3.zero
 
-			-- كسر البوست الأولي إذا بدأ اللاعب بأي حركة
-			if moveDirection.Magnitude > 0 or math.abs(vertical) > 0 then
-				isInitialBoosting = false
-				movedOnce = true
-			end
-
+			-- إذا تحرك اللاعب أو انتهى الوقت، يتم إلغاء البوست فوراً
 			if isInitialBoosting then
 				local t = math.clamp((os.clock() - boostStartTime) / initialBoostDuration, 0, 1)
-				local smooth = 1 - (1 - t) * (1 - t)
-				bodyVelocity.Velocity = Vector3.new(0, initialBoost * (1 - smooth), 0)
-				if t >= 1 then isInitialBoosting = false end
-			else
-				-- تنعيم الحركة (تعمل بشكل ممتاز على الجوال والكمبيوتر)
-				local alpha = 1 - math.exp(-10 * dt)
+
+				if isMoving or t >= 1 then
+					isInitialBoosting = false
+				else
+					local smooth = 1 - (1 - t) * (1 - t)
+					bodyVelocity.Velocity = Vector3.new(0, initialBoost * (1 - smooth), 0)
+				end
+			end
+
+			-- الحركة العادية تعمل فقط إذا لم نكن في مرحلة البوست
+			if not isInitialBoosting then
+				local alpha = 1 - math.exp(-6 * dt)
 				bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(targetVelocity, alpha)
 			end
 
-			-- التوجيه البصري (الدوران)
+			-- الجزء البصري (الدوران والميلان)
+			if not movedOnce and moveVector.Magnitude > 0 then
+				movedOnce = true
+			end
+
+		
 			if movedOnce then
 				local targetTilt = 0
-				-- إذا كان يتحرك للأمام (عبر الجوستيك أو W)
-				if moveDirection.Magnitude > 0 then
-					targetTilt = math.rad(-12)
-				end
+				if CONTROL.F > 0 then targetTilt = math.rad(-10)
+				elseif CONTROL.B > 0 then targetTilt = math.rad(10) end
 
+				-- تنعيم حساب الميلان (بصرياً)
 				currentTilt = currentTilt + (targetTilt - currentTilt) * (1 - math.exp(-10 * dt))
 
+				-- تنعيم الدوران بصرياً فقط
 				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(
-					CFrame.new(torso.Position, torso.Position + camera.CFrame.LookVector) * CFrame.Angles(currentTilt, 0, 0),
+					CFrame.new(torso.Position, torso.Position + camera.CFrame.LookVector) * CFrame.Angles(currentTilt,0,0),
 					1 - math.exp(-12 * dt)
 				)
 			end
 		end
 
-		-- التنظيف
+		-- التكملة (التنظيف) كما هي
 		if bodyGyro then bodyGyro:Destroy() end
 		if bodyVelocity then bodyVelocity:Destroy() end
 		humanoid.PlatformStand = false
+		for _, part in ipairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then part.CanCollide = true end
+		end
 	end)
 end
 
