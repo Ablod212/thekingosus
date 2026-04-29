@@ -864,11 +864,11 @@ local function getFlySpeed()
 end
 
 --// Start BodyMover Fly Loop
+--// ابحث عن هذه الدالة في سكربتك واستبدل محتواها بهذا الجزء:
 local function startBodyMoverFlyLoop()
 	if not character or not torso or not humanoid then return end
 	FLYING = true
 	isInitialBoosting = true
-
 	humanoid.PlatformStand = true
 
 	bodyVelocity = Instance.new("BodyVelocity", torso)
@@ -876,87 +876,71 @@ local function startBodyMoverFlyLoop()
 
 	bodyGyro = Instance.new("BodyGyro", torso)
 	bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-	-- رفعنا الـ P والـ D لضمان أن الدوران البصري يكون ناعم وبدون "رجفة"
 	bodyGyro.D = 500
 	bodyGyro.P = 3000
 	bodyGyro.CFrame = torso.CFrame
 
-	-- الحركة تبقى حادة بعد البوست
-	local lerpFactorGyro = 0.07
-	local currentTilt = 0
 	local movedOnce = false
-	local targetLift = 10
-
-	-- بوست أولي أقوى من السابق
+	local targetLift = 30 -- قوة الرفع لـ Q و E
 	local initialBoost = 11.8
 	local initialBoostDuration = 0.65
 	local boostStartTime = os.clock()
+	local currentTilt = 0
 
 	task.spawn(function()
 		while FLYING and torso.Parent do
 			local dt = RunService.Heartbeat:Wait()
 			local camera = workspace.CurrentCamera
-
-			local moveVector = (camera.CFrame.LookVector * (CONTROL.F + CONTROL.B)) +
-				((camera.CFrame * CFrame.new((CONTROL.L + CONTROL.R),0,0)).Position - camera.CFrame.Position)
-
-			local vertical = (CONTROL.Q + CONTROL.E) * targetLift
-			moveVector = moveVector + Vector3.new(0, vertical, 0)
-
-			if moveVector.Magnitude > 0 then
-               isInitialBoosting = false
-            end
-
 			local flySpeed = getFlySpeed()
-			local targetVelocity = moveVector.Magnitude > 0 and moveVector.Unit * flySpeed or Vector3.new(0,0,0)
 
-			bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(targetVelocity, 0.15)
+			--// الجزء الذي سألت عنه (محرك الحركة الجديد):
+			-- استخدام MoveDirection يدعم الجوستيك (الجوال) والكيبورد معاً
+			local moveDirection = humanoid.MoveDirection 
+			local targetVelocity = moveDirection * flySpeed
 
-			-- الجزء العملي:
-			-- أول جزء: بوست أولي ناعم وقوي
-			-- بعده: حركة مباشرة بدون سموث
-			if isInitialBoosting then
-				local t = math.clamp((os.clock() - boostStartTime) / initialBoostDuration, 0, 1)
-				local smooth = 1 - (1 - t) * (1 - t)
+			-- حساب الارتفاع لـ Q و E
+			local vertical = (CONTROL.Q + CONTROL.E) * targetLift
+			targetVelocity = targetVelocity + Vector3.new(0, vertical, 0)
 
-				bodyVelocity.Velocity = Vector3.new(0, initialBoost * (1 - smooth), 0)
-
-				if t >= 1 then
-					isInitialBoosting = false
-				end
-			else
-				local alpha = 1 - math.exp(-6 * dt)
-                bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(targetVelocity, alpha)
-			end
-
-			if not movedOnce and moveVector.Magnitude > 0 then
+			-- كسر البوست الأولي إذا بدأ اللاعب بالتحرك
+			if moveDirection.Magnitude > 0 or math.abs(vertical) > 0 then
+				isInitialBoosting = false
 				movedOnce = true
 			end
 
-			-- الجزء البصري (الدوران والميلان - هنا السموث)
+			-- منطق البوست الأولي (عند تفعيل الطيران لأول مرة)
+			if isInitialBoosting then
+				local t = math.clamp((os.clock() - boostStartTime) / initialBoostDuration, 0, 1)
+				local smooth = 1 - (1 - t) * (1 - t)
+				bodyVelocity.Velocity = Vector3.new(0, initialBoost * (1 - smooth), 0)
+				if t >= 1 then isInitialBoosting = false end
+			else
+				-- الحركة السلسة أثناء الطيران العادي
+				local alpha = 1 - math.exp(-6 * dt)
+				bodyVelocity.Velocity = bodyVelocity.Velocity:Lerp(targetVelocity, alpha)
+			end
+
+			-- التوجيه البصري (ميلان الشخصية)
 			if movedOnce then
 				local targetTilt = 0
-				if CONTROL.F > 0 then targetTilt = math.rad(-10)
-				elseif CONTROL.B > 0 then targetTilt = math.rad(10) end
+				if moveDirection.Magnitude > 0 then
+					-- حساب الميلان بناءً على اتجاه الكاميرا والحركة
+					targetTilt = math.rad(-10) 
+				end
 
-				-- تنعيم حساب الميلان (بصرياً)
 				currentTilt = currentTilt + (targetTilt - currentTilt) * (1 - math.exp(-10 * dt))
-
-				-- تنعيم الدوران بصرياً فقط
+				
 				bodyGyro.CFrame = bodyGyro.CFrame:Lerp(
-					CFrame.new(torso.Position, torso.Position + camera.CFrame.LookVector) * CFrame.Angles(currentTilt,0,0),
+					CFrame.new(torso.Position, torso.Position + camera.CFrame.LookVector) * CFrame.Angles(currentTilt, 0, 0),
 					1 - math.exp(-12 * dt)
 				)
 			end
 		end
 
-		-- التكملة (التنظيف) كما هي
+		-- تنظيف الموارد عند الإيقاف
 		if bodyGyro then bodyGyro:Destroy() end
 		if bodyVelocity then bodyVelocity:Destroy() end
 		humanoid.PlatformStand = false
-		for _, part in ipairs(character:GetDescendants()) do
-			if part:IsA("BasePart") then part.CanCollide = true end
-		end
 	end)
 end
 
