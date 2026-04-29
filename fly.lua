@@ -853,51 +853,55 @@ local CONTROL = {F=0,B=0,L=0,R=0,Q=0,E=0}
 -- MOBILE TOUCH SUPPORT
 if UserInputService.TouchEnabled then
 
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "FlyTouchUI"
-	gui.Parent = game.CoreGui
+	local lastPos = nil
 
-	local function MakeBtn(txt,x,y)
-		local b = Instance.new("TextButton")
-		b.Parent = gui
-		b.Size = UDim2.new(0,55,0,55)
-		b.Position = UDim2.new(0,x,0,y)
-		b.Text = txt
-		b.TextScaled = true
-		b.BackgroundColor3 = Color3.fromRGB(25,25,25)
-		b.BackgroundTransparency = 0.2
-		b.TextColor3 = Color3.fromRGB(255,255,255)
-		Instance.new("UICorner",b)
-		return b
-	end
+	UserInputService.TouchStarted:Connect(function(touch, gpe)
+		if gpe then return end
+		lastPos = touch.Position
+	end)
 
-	local W = MakeBtn("↑",120,420)
-	local S = MakeBtn("↓",120,485)
-	local A = MakeBtn("←",55,485)
-	local D = MakeBtn("→",185,485)
-	local Q = MakeBtn("▼",300,485)
-	local E = MakeBtn("▲",300,420)
+	UserInputService.TouchMoved:Connect(function(touch, gpe)
+		if gpe then return end
+		if not lastPos then
+			lastPos = touch.Position
+			return
+		end
 
-	W.MouseButton1Down:Connect(function() CONTROL.F = 1 end)
-	W.MouseButton1Up:Connect(function() CONTROL.F = 0 end)
+		local delta = touch.Position - lastPos
+		lastPos = touch.Position
 
-	S.MouseButton1Down:Connect(function() CONTROL.B = -1 end)
-	S.MouseButton1Up:Connect(function() CONTROL.B = 0 end)
+		CONTROL.F = 0
+		CONTROL.B = 0
+		CONTROL.L = 0
+		CONTROL.R = 0
+		CONTROL.Q = 0
+		CONTROL.E = 0
 
-	A.MouseButton1Down:Connect(function() CONTROL.L = -1 end)
-	A.MouseButton1Up:Connect(function() CONTROL.L = 0 end)
+		if delta.Y < -8 then
+			CONTROL.F = 1
+		elseif delta.Y > 8 then
+			CONTROL.B = -1
+		end
 
-	D.MouseButton1Down:Connect(function() CONTROL.R = 1 end)
-	D.MouseButton1Up:Connect(function() CONTROL.R = 0 end)
+		if delta.X < -8 then
+			CONTROL.L = -1
+		elseif delta.X > 8 then
+			CONTROL.R = 1
+		end
+	end)
 
-	Q.MouseButton1Down:Connect(function() CONTROL.Q = -1 end)
-	Q.MouseButton1Up:Connect(function() CONTROL.Q = 0 end)
+	UserInputService.TouchEnded:Connect(function()
+		lastPos = nil
 
-	E.MouseButton1Down:Connect(function() CONTROL.E = 1 end)
-	E.MouseButton1Up:Connect(function() CONTROL.E = 0 end)
+		CONTROL.F = 0
+		CONTROL.B = 0
+		CONTROL.L = 0
+		CONTROL.R = 0
+		CONTROL.Q = 0
+		CONTROL.E = 0
+	end)
 
 end
-
 --// TextBox (ضع هنا TextBox الخاص بك)
 local TextBox = TextBox -- تأكد أنه معرف في GUI
 
