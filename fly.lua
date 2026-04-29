@@ -850,6 +850,54 @@ local isInitialBoosting = false
 local bodyGyro, bodyVelocity
 local CONTROL = {F=0,B=0,L=0,R=0,Q=0,E=0}
 
+-- MOBILE TOUCH SUPPORT
+if UserInputService.TouchEnabled then
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "FlyTouchUI"
+	gui.Parent = game.CoreGui
+
+	local function MakeBtn(txt,x,y)
+		local b = Instance.new("TextButton")
+		b.Parent = gui
+		b.Size = UDim2.new(0,55,0,55)
+		b.Position = UDim2.new(0,x,0,y)
+		b.Text = txt
+		b.TextScaled = true
+		b.BackgroundColor3 = Color3.fromRGB(25,25,25)
+		b.BackgroundTransparency = 0.2
+		b.TextColor3 = Color3.fromRGB(255,255,255)
+		Instance.new("UICorner",b)
+		return b
+	end
+
+	local W = MakeBtn("↑",120,420)
+	local S = MakeBtn("↓",120,485)
+	local A = MakeBtn("←",55,485)
+	local D = MakeBtn("→",185,485)
+	local Q = MakeBtn("▼",300,485)
+	local E = MakeBtn("▲",300,420)
+
+	W.MouseButton1Down:Connect(function() CONTROL.F = 1 end)
+	W.MouseButton1Up:Connect(function() CONTROL.F = 0 end)
+
+	S.MouseButton1Down:Connect(function() CONTROL.B = -1 end)
+	S.MouseButton1Up:Connect(function() CONTROL.B = 0 end)
+
+	A.MouseButton1Down:Connect(function() CONTROL.L = -1 end)
+	A.MouseButton1Up:Connect(function() CONTROL.L = 0 end)
+
+	D.MouseButton1Down:Connect(function() CONTROL.R = 1 end)
+	D.MouseButton1Up:Connect(function() CONTROL.R = 0 end)
+
+	Q.MouseButton1Down:Connect(function() CONTROL.Q = -1 end)
+	Q.MouseButton1Up:Connect(function() CONTROL.Q = 0 end)
+
+	E.MouseButton1Down:Connect(function() CONTROL.E = 1 end)
+	E.MouseButton1Up:Connect(function() CONTROL.E = 0 end)
+
+end
+
 --// TextBox (ضع هنا TextBox الخاص بك)
 local TextBox = TextBox -- تأكد أنه معرف في GUI
 
